@@ -12,10 +12,10 @@ MaxSpeed = 7
 CloseSpeed = 3
 
 #Fingers middle poses
-MiddlePos = [3, 0, -5, -8, -2, 5, -12, 0] # replace values by your calibration results
+MiddlePos = [1, -3, 0, 0, 0, -8, 0, 0] # replace values by your calibration results
 
 c = Scs0009PyController(
-        serial_port="COM11",
+        serial_port="/dev/ttyACM0",
         baudrate=1000000,
         timeout=0.5,
     )
@@ -31,7 +31,7 @@ def main():
         t = time.time() - t0
 
         OpenHand()
-        time.sleep(0.5)
+        time.sleep(3)
 
         CloseHand()
         time.sleep(3)

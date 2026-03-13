@@ -1,0 +1,4 @@
+matplotlib
+mediapipe
+opencv-python
+rustypot
