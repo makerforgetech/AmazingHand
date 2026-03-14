@@ -1,4 +1,3 @@
-
 import cv2
 import mediapipe as mp
 from mediapipe.tasks.python.vision.hand_landmarker import HandLandmarker, HandLandmarkerOptions
@@ -119,6 +118,28 @@ def Scissors():
             Move_Index(-65, 15, MaxSpeed)
             Move_Middle(-15, 65, MaxSpeed)
 
+def hand_count_123():
+    """
+    Make the hand count 1, 2, 3 with its fingers before each round.
+    1: Index up, others closed
+    2: Index and middle up, others closed
+    3: Index, middle, and ring up, thumb closed
+    """
+    # 1: Index up
+    CloseHand()
+    _time.sleep(0.3)
+    Move_Index(-35, 35, MaxSpeed)  # Open index
+    _time.sleep(0.7)
+    # 2: Index + Middle up
+    Move_Middle(-35, 35, MaxSpeed)  # Open middle
+    _time.sleep(0.7)
+    # 3: Index + Middle + Ring up
+    Move_Ring(-35, 35, MaxSpeed)  # Open ring
+    _time.sleep(0.7)
+    # Return to closed hand
+    # CloseHand()
+    # _time.sleep(0.3)
+
 def move_hand_by_gesture(gesture):
     """
     Move the robot hand according to the detected gesture.
@@ -154,75 +175,123 @@ if not cap.isOpened():
     print("Cannot open camera")
     sys.exit()
 
+
 frame_idx = 0
 last_prediction = None
+hand_visible = False
+waiting_for_hand = False
+
 while True:
-    ret, frame = cap.read()
-    if not ret:
-        print("Can't receive frame (stream end?). Exiting ...")
-        break
+    # 1. Wait for no hand visible, then count to three
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Can't receive frame (stream end?). Exiting ...")
+            cap.release()
+            cv2.destroyAllWindows()
+            sys.exit()
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = Image(image_format=ImageFormat.SRGB, data=frame_rgb)
+        result = hand_landmarker.detect_for_video(mp_image, frame_idx)
+        frame_idx += 1
+        annotated_image = frame.copy()
+        hand_detected = bool(result.hand_landmarks)
+        cv2.putText(annotated_image, "Show hand to play", (10, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 255, 255), 3)
+        cv2.imshow('Hand Recognition', annotated_image)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            cap.release()
+            cv2.destroyAllWindows()
+            sys.exit()
+        if not hand_detected:
+            break
+    # Count to three
+    hand_count_123()
 
-    # Convert the frame to RGB
-    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    # 2. Wait for hand to appear
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Can't receive frame (stream end?). Exiting ...")
+            cap.release()
+            cv2.destroyAllWindows()
+            sys.exit()
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = Image(image_format=ImageFormat.SRGB, data=frame_rgb)
+        result = hand_landmarker.detect_for_video(mp_image, frame_idx)
+        frame_idx += 1
+        annotated_image = frame.copy()
+        hand_detected = bool(result.hand_landmarks)
+        if hand_detected:
+            break
+        cv2.putText(annotated_image, "Show hand to play", (10, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 255, 255), 3)
+        cv2.imshow('Hand Recognition', annotated_image)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            cap.release()
+            cv2.destroyAllWindows()
+            sys.exit()
 
-    # Run hand landmark detection (VIDEO mode requires timestamp)
-    mp_image = Image(image_format=ImageFormat.SRGB, data=frame_rgb)
-    result = hand_landmarker.detect_for_video(mp_image, frame_idx)
-    frame_idx += 1
-
-    annotated_image = frame.copy()
-
-    prediction_text = ""
-    if result.hand_landmarks:
-        for hand_landmarks in result.hand_landmarks:
-            draw_landmarks(
-                annotated_image,
-                hand_landmarks,
-                HandLandmarksConnections.HAND_CONNECTIONS
-            )
-
-            # Extract landmark coordinates
-            lmList = []
-            for id, lm in enumerate(hand_landmarks):
-                h, w, c = frame.shape
-                cx, cy = int(lm.x * w), int(lm.y * h)
-                lmList.append([id, cx, cy])
-
-            # Rule-based RPS detection
-            tips = [4, 8, 12, 16, 20]
-            pip_joints = [3, 6, 10, 14, 18]
-            fingers = []
-            if lmList:
-                if lmList[4][1] < lmList[3][1]:
-                    fingers.append(1)  # Thumb open
-                else:
-                    fingers.append(0)  # Thumb closed
-                for tip, pip in zip(tips[1:], pip_joints[1:]):
-                    if lmList[tip][2] < lmList[pip][2]:
-                        fingers.append(1)
+    # 3. Respond to gesture while hand is visible
+    last_prediction = None
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Can't receive frame (stream end?). Exiting ...")
+            cap.release()
+            cv2.destroyAllWindows()
+            sys.exit()
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = Image(image_format=ImageFormat.SRGB, data=frame_rgb)
+        result = hand_landmarker.detect_for_video(mp_image, frame_idx)
+        frame_idx += 1
+        annotated_image = frame.copy()
+        hand_detected = bool(result.hand_landmarks)
+        prediction_text = ""
+        if hand_detected:
+            for hand_landmarks in result.hand_landmarks:
+                draw_landmarks(
+                    annotated_image,
+                    hand_landmarks,
+                    HandLandmarksConnections.HAND_CONNECTIONS
+                )
+                # Extract landmark coordinates
+                lmList = []
+                for id, lm in enumerate(hand_landmarks):
+                    h, w, c = frame.shape
+                    cx, cy = int(lm.x * w), int(lm.y * h)
+                    lmList.append([id, cx, cy])
+                # Rule-based RPS detection
+                tips = [4, 8, 12, 16, 20]
+                pip_joints = [3, 6, 10, 14, 18]
+                fingers = []
+                if lmList:
+                    if lmList[4][1] < lmList[3][1]:
+                        fingers.append(1)  # Thumb open
                     else:
-                        fingers.append(0)
-
-                # Rule logic
-                if fingers[1:] == [0, 0, 0, 0]:
-                    prediction_text = "Rock"
-                elif fingers[1:] == [1, 1, 1, 1]:
-                    prediction_text = "Paper"
-                elif fingers[1:3] == [1, 1] and fingers[3:] == [0, 0]:
-                    prediction_text = "Scissors"
-                else:
-                    prediction_text = "Unknown"
-
-                # Move robot hand if gesture changed
-                if prediction_text in ("Rock", "Paper", "Scissors") and prediction_text != last_prediction:
-                    move_hand_by_gesture(prediction_text)
-                    last_prediction = prediction_text
-
+                        fingers.append(0)  # Thumb closed
+                    for tip, pip in zip(tips[1:], pip_joints[1:]):
+                        if lmList[tip][2] < lmList[pip][2]:
+                            fingers.append(1)
+                        else:
+                            fingers.append(0)
+                    # Rule logic
+                    if fingers[1:] == [0, 0, 0, 0]:
+                        prediction_text = "Rock"
+                    elif fingers[1:] == [1, 1, 1, 1]:
+                        prediction_text = "Paper"
+                    elif fingers[1:3] == [1, 1] and fingers[3:] == [0, 0]:
+                        prediction_text = "Scissors"
+                    else:
+                        prediction_text = "Unknown"
+                    # Move robot hand if gesture changed
+                    if prediction_text in ("Rock", "Paper", "Scissors") and prediction_text != last_prediction:
+                        move_hand_by_gesture(prediction_text)
+                        last_prediction = prediction_text
             cv2.putText(annotated_image, f"Prediction: {prediction_text}", (10, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 255, 0), 3)
-
-    cv2.imshow('Hand Recognition', annotated_image)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-cap.release()
-cv2.destroyAllWindows()
+        else:
+            # Hand removed, break to start next round
+            break
+        cv2.imshow('Hand Recognition', annotated_image)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            cap.release()
+            cv2.destroyAllWindows()
+            sys.exit()
