@@ -284,9 +284,14 @@ while True:
                         prediction_text = "Unknown"
                     # Move robot hand if gesture changed
                     if prediction_text in ("Rock", "Paper", "Scissors") and prediction_text != last_prediction:
+                        # Show the prediction frame before moving the hand
+                        cv2.putText(annotated_image, f"Prediction: {prediction_text}", (10, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 255, 0), 3)
+                        cv2.imshow('Hand Recognition', annotated_image)
+                        cv2.waitKey(1)  # Process GUI events
                         move_hand_by_gesture(prediction_text)
                         last_prediction = prediction_text
-            cv2.putText(annotated_image, f"Prediction: {prediction_text}", (10, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 255, 0), 3)
+            if not (prediction_text in ("Rock", "Paper", "Scissors") and prediction_text != last_prediction):
+                cv2.putText(annotated_image, f"Prediction: {prediction_text}", (10, 70), cv2.FONT_HERSHEY_PLAIN, 3, (0, 255, 0), 3)
         else:
             # Hand removed, break to start next round
             break
